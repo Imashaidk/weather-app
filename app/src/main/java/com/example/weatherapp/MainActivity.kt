@@ -1,9 +1,7 @@
-package com.example.weatherapp  // keep whatever your actual package name is
+package com.example.weatherapp
 
 import android.os.Bundle
 import android.view.View
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -11,10 +9,11 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
+import java.net.UnknownHostException
 
 class MainActivity : AppCompatActivity() {
 
-    // Declare variables for every UI element we need to control
     private lateinit var cityEditText: EditText
     private lateinit var searchButton: Button
     private lateinit var resultCard: LinearLayout
@@ -31,7 +30,6 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Connect each variable to its matching id in activity_main.xml
         cityEditText = findViewById(R.id.cityEditText)
         searchButton = findViewById(R.id.searchButton)
         resultCard = findViewById(R.id.resultCard)
@@ -42,43 +40,43 @@ class MainActivity : AppCompatActivity() {
         windText = findViewById(R.id.windText)
         errorText = findViewById(R.id.errorText)
 
-        // Force focus on the search box when the app opens
-        cityEditText.requestFocus()
-
         searchButton.setOnClickListener {
             val city = cityEditText.text.toString().trim()
-            if (city.isNotEmpty()) {
-                searchWeather(city)
-            }
-        }
-
-        // Allow searching by pressing "Enter" on the keyboard
-        cityEditText.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE) {
-                val city = cityEditText.text.toString().trim()
-                if (city.isNotEmpty()) {
-                    searchWeather(city)
-                }
-                true
-            } else {
-                false
-            }
+            searchWeather(city)
         }
     }
 
     private fun searchWeather(city: String) {
-        hideKeyboard()
-        // Hide old results/errors before starting a new search
         resultCard.visibility = View.GONE
         errorText.visibility = View.GONE
+
+        // Case 1: Empty city name
+        if (city.isEmpty()) {
+            showError("Please enter a city name.")
+            return
+        }
 
         lifecycleScope.launch {
             try {
                 val response = RetrofitInstance.api.getWeather(city, apiKey)
                 showResult(response)
+
+            } catch (e: UnknownHostException) {
+                // Case 3: No internet / can't reach the server
+                showError("No internet connection. Please check your network and try again.")
+
+            } catch (e: HttpException) {
+                if (e.code() == 404) {
+                    // Case 2: Invalid city
+                    showError("City not found. Please check the spelling and try again.")
+                } else {
+                    // Case 4: API returned some other error
+                    showError("Weather service error. Please try again later.")
+                }
+
             } catch (e: Exception) {
-                // TEMPORARY: showing the real error so we can debug it
-                showError("Error: ${e.javaClass.simpleName} - ${e.message}")
+                // Catch-all for anything unexpected
+                showError("Something went wrong. Please try again.")
             }
         }
     }
@@ -96,10 +94,5 @@ class MainActivity : AppCompatActivity() {
     private fun showError(message: String) {
         errorText.text = message
         errorText.visibility = View.VISIBLE
-    }
-
-    private fun hideKeyboard() {
-        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.hideSoftInputFromWindow(cityEditText.windowToken, 0)
     }
 }
